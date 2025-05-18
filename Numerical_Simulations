@@ -1,0 +1,155 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.integrate import solve_ivp
+
+# Time varying parameters
+def c(t):
+    return 0.5 + 0.2 * np.sin(t)
+
+def e(t):
+    return 0.6 + 0.1 * np.cos(t)
+
+# initial condition and parameters
+y0 = 0.5
+t_end = 30
+alpha_list = [0.05, 0.1, 0.15]
+
+# ODE 
+def dydt(t, y):
+    return c(t) * y * (1 - y) - e(t) * y
+
+# Impulse condition
+def evento(t, y):
+    return y[0] - 0.15
+evento.terminal = True
+evento.direction = -1
+
+# Build Figure 1 
+fig, axes = plt.subplots(nrows=3, ncols=1, figsize=(6, 9), sharex=True)
+
+for idx, alpha in enumerate(alpha_list):
+    t_full = []
+    y_full = []
+
+    current_t = 0
+    current_y = np.array([y0])
+
+    while current_t < t_end:
+        sol = solve_ivp(
+            dydt,
+            (current_t, t_end),
+            current_y,
+            t_eval=np.linspace(current_t, t_end, 1000),
+            events=evento,
+            rtol=1e-6, atol=1e-9
+        )
+
+        t_full.append(sol.t)
+        y_full.append(sol.y[0])
+
+        if sol.status == 1:  # Impulse detection 
+            current_t = sol.t_events[0][0]
+            current_y = np.array([sol.y_events[0][0][0] + alpha / 2])  # Apply impulse
+            # Add jump
+            t_full.append([current_t])
+            y_full.append([current_y[0]])
+        else:
+            break
+
+    # Concatenate results
+    t_full = np.concatenate(t_full)
+    y_full = np.concatenate(y_full)
+
+    
+    ax = axes[idx]
+    ax.plot(t_full, y_full, label=f'$\\alpha={alpha}$')
+    #ax.set_ylim(0,1)
+    ax.axhline(0.15, color='gray', linestyle='--', label='$p_{\min}=0.15$')
+    ax.set_ylabel('Fraction of inhabited patches')
+    ax.grid(True)
+    ax.legend(loc='upper right')
+
+axes[-1].set_xlabel('Time')
+
+plt.savefig('Figura1.eps', format='eps')
+plt.show()
+########################
+########################
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.integrate import solve_ivp
+
+# Time varying parameters
+def c(t):
+    return 0.5 + 0.2 * np.sin(t)
+
+def e(t):
+    return 0.6 + 0.1 * np.cos(t)
+
+# Initial conditions and parameters
+y0_list = np.array([0.65, 0.50, 0.35, 0.20])  
+alpha_list = np.array([0.45, 0.55])
+
+t_end = 30
+
+# ODE
+def dydt(t, y):
+    return c(t) * y * (1 - y) - e(t) * y
+
+# Impulse
+def evento(t, y):
+    return y[0] - 0.15
+evento.terminal = True
+evento.direction = -1
+
+# For alpha
+for alpha in alpha_list:
+    plt.figure()  
+
+    for y0 in y0_list:
+        t_full = []
+        y_full = []
+
+        current_t = 0
+        current_y = np.array([y0])
+
+        while current_t < t_end:
+            sol = solve_ivp(
+                dydt,
+                (current_t, t_end),
+                current_y,
+                t_eval=np.linspace(current_t, t_end, 1000),
+                events=evento,
+                rtol=1e-6, atol=1e-9
+            )
+
+            t_full.append(sol.t)
+            y_full.append(sol.y[0])
+
+            if sol.status == 1:  # event detection
+                current_t = sol.t_events[0][0]
+                current_y = np.array([sol.y_events[0][0][0] + alpha / 2])  # impulse
+                # add jump 
+                t_full.append([current_t])
+                y_full.append([current_y[0]])
+            else:
+                break
+
+        # Concatenate results
+        t_full = np.concatenate(t_full)
+        y_full = np.concatenate(y_full)
+
+        # Plot
+        plt.plot(t_full, y_full, label=f'$p(0)={y0}$')
+
+    
+    plt.axhline(0.15, color='gray', linestyle='--', label='$p_{\min}=0.15$')
+    plt.xlabel('Time')
+    plt.ylabel('Fraction of inhabited patches')
+    plt.ylim(0, 0.7)
+    plt.xlim(0, 30)
+    plt.grid(True)
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(f'Figure2_alpha_{alpha:.2f}.eps', format='eps')
+    plt.show()
