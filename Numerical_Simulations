@@ -2,6 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.integrate import solve_ivp
 
+## Figure 3.
+
 # Time varying parameters
 def c(t):
     return 0.5 + 0.2 * np.sin(t)
@@ -24,7 +26,7 @@ def evento(t, y):
 evento.terminal = True
 evento.direction = -1
 
-# Build Figure 1 
+# Build Figure
 fig, axes = plt.subplots(nrows=3, ncols=1, figsize=(6, 9), sharex=True)
 
 for idx, alpha in enumerate(alpha_list):
@@ -69,15 +71,13 @@ for idx, alpha in enumerate(alpha_list):
     ax.grid(True)
     ax.legend(loc='upper right')
 
+
 axes[-1].set_xlabel('Time')
 
 plt.savefig('Figura1.eps', format='eps')
 plt.show()
-########################
-########################
-import numpy as np
-import matplotlib.pyplot as plt
-from scipy.integrate import solve_ivp
+
+## Figure 4
 
 # Time varying parameters
 def c(t):
@@ -144,6 +144,7 @@ for alpha in alpha_list:
 
     
     plt.axhline(0.15, color='gray', linestyle='--', label='$p_{\min}=0.15$')
+    #plt.title(f'Soluciones impulsivas con $\\alpha={alpha}$')
     plt.xlabel('Time')
     plt.ylabel('Fraction of inhabited patches')
     plt.ylim(0, 0.7)
@@ -153,3 +154,311 @@ for alpha in alpha_list:
     plt.tight_layout()
     plt.savefig(f'Figure2_alpha_{alpha:.2f}.eps', format='eps')
     plt.show()
+
+
+## Figure 5
+
+def c(t):
+    return 0.5 + 0.1 * np.sin(t)
+
+def e(t):
+    return 0.7 + 0.1 * np.cos(t)
+
+def d(t):
+    return e(t) - c(t)
+
+def h(t):
+    return -c(t)/d(t)
+
+
+def compute_exp_integral_d_0_T(T, d_fun):
+    integral_d_0_T, _ = quad(d_fun, 0, T)
+    return np.exp(integral_d_0_T)
+
+def Psi(t, T, c_fun, d_fun, factor_exp_0_T):
+    # First term
+    def integrand_1(s):
+        integral_d_t_s, _ = quad(d_fun, t, s)
+        return c_fun(s) * np.exp(-integral_d_t_s)
+    integral_1, _ = quad(integrand_1, t, T)
+    term1 = integral_1 * factor_exp_0_T
+    # Second term
+    def integrand_2(s):
+        integral_d_s_t, _ = quad(d_fun, s, t)
+        return c_fun(s) * np.exp(integral_d_s_t)
+    term2, _ = quad(integrand_2, 0, t)
+    return term1 + term2
+
+def compute_u0(t1, T, c_fun, d_fun, u_alpha):
+    integral_d_t1_T, _ = quad(d_fun, t1, T)
+    term1 = u_alpha * np.exp(integral_d_t1_T)
+    def integrand(s):
+        integral_d_s_T, _ = quad(d_fun, s, T)
+        return c_fun(s) * np.exp(integral_d_s_T)
+    term2, _ = quad(integrand, t1, T)
+    return term1 + term2
+
+# ---------- ODE ----------
+def dydt(t, y):
+    return c(t) * y * (1 - y) - e(t) * y
+
+def make_event(umax):
+    def evento(t, y):
+        return y[0] - 1.0/umax
+    evento.terminal = True
+    evento.direction = -1
+    return evento
+
+
+_ = minimize_scalar(h, bounds=(1, 3), method='bounded')  # mismo cálculo que tenías; opcional mostrar
+T = 2*np.pi
+factor_exp_0_T = compute_exp_integral_d_0_T(T, d)
+
+
+umax_values = [12, 15, 20]  
+t_end = 30.0
+t_eval_n = 1000
+
+
+# Build figure
+fig, axes = plt.subplots(nrows=len(umax_values), ncols=1, figsize=(6, 9), sharex=True)
+
+for idx, umax in enumerate(umax_values):
+    # Recalcular todos los términos dependientes de umax
+    psi_1   = Psi(t=1.0, T=T, c_fun=c, d_fun=d, factor_exp_0_T=factor_exp_0_T)
+    u_alpha = (umax - psi_1) / (factor_exp_0_T)
+    pmin    = 1.0/umax
+    alpha2  = 1.0/u_alpha - pmin
+
+    
+    t1 = 1.0
+    u0 = compute_u0(t1, T, c, d, u_alpha)
+    p0 = 1.0/u0
+
+    
+    current_y = np.array([p0])         
+
+    evento = make_event(umax)
+
+    t_full = []
+    y_full = []
+    current_t = 0.0
+
+    while current_t < t_end:
+        sol = solve_ivp(
+            dydt,
+            (current_t, t_end),
+            current_y,
+            t_eval=np.linspace(current_t, t_end, t_eval_n),
+            events=evento,
+            rtol=1e-6, atol=1e-9
+        )
+
+        t_full.append(sol.t)
+        y_full.append(sol.y[0])
+
+        if sol.status == 1:  # se gatilló el evento
+            te = sol.t_events[0][0]
+            ye = sol.y_events[0][0][0]
+            current_t = te
+            current_y = np.array([ye + alpha2])  # aplicar impulso
+
+            
+            t_full.append([current_t])
+            y_full.append([current_y[0]])
+        else:
+            break
+
+    
+    t_full = np.concatenate(t_full)
+    y_full = np.concatenate(y_full)
+    ax = axes[idx] if len(umax_values) > 1 else axes
+
+    
+    ax.plot(t_full, y_full)
+    ax.set_ylim(0, 1.0)
+    ax.axhline(pmin, color='gray', linestyle='--', label=fr'$p_{{\min}}={pmin:.3f}$')
+    ax.set_ylabel('Fraction of inhabited patches')
+    ax.grid(True)
+    ax.legend(loc='upper right')
+    ax.set_title(fr'$u_{{\max}}={umax},\ \alpha={alpha2:.4f}$')
+
+
+axes[-1].set_xlabel('Time')
+
+plt.tight_layout()
+plt.savefig('PeriodicFigure.eps', format='eps')
+plt.show()
+
+## Figure 6
+
+# Time varying parameters
+def c(t):
+    return 0.5 + 0.2 * np.sin(t)
+
+def e(t):
+    return 0.6 + 0.1 * np.cos(t)
+
+# Parametes
+y0_list = [0.2, 0.35, 0.5, 0.65]   
+pmin = 0.18
+impulse_times = list(range(3, 51, 3))
+t_end = 50
+alpha_list = [0.3, 0.5, 0.7]   
+
+# Impulse Function
+def K(y, alpha):
+    if y < pmin:
+        return 0
+    else:
+        return alpha * (1 - y) / (2 - (y + pmin))
+
+# Build Figure 3
+fig, axes = plt.subplots(nrows=3, ncols=1, figsize=(8, 10), sharex=True)
+
+for idx, alpha in enumerate(alpha_list):
+    ax = axes[idx]
+    
+    for y0 in y0_list:
+        t_full = []
+        y_full = []
+        current_t = 0
+        current_y = y0
+
+        
+        for t_impulse in impulse_times:
+            sol = solve_ivp(dydt := lambda t, y: c(t) * y * (1 - y) - e(t) * y,
+                            (current_t, t_impulse), [current_y],
+                            t_eval=np.linspace(current_t, t_impulse, 100))
+            t_full.append(sol.t)
+            y_full.append(sol.y[0])
+            current_t = t_impulse
+            current_y = sol.y[0, -1] + K(sol.y[0, -1], alpha)
+
+        
+        sol = solve_ivp(dydt, (current_t, t_end), [current_y],
+                        t_eval=np.linspace(current_t, t_end, 100))
+        t_full.append(sol.t)
+        y_full.append(sol.y[0])
+
+        
+        t_total = np.concatenate(t_full)
+        y_total = np.concatenate(y_full)
+
+        # Plot
+        ax.plot(t_total, y_total, label=f'$p(0) = {y0}$')
+
+    ax.axhline(pmin, color='gray', linestyle='--', label='$p_{\\min}=0.18$', linewidth=1)
+    ax.set_ylabel('Fraction of inhabited patches')
+    ax.set_title(f'$\\alpha = {alpha}$')
+    ax.grid(True)
+    ax.legend(loc='upper right')
+
+axes[-1].set_xlabel('Time')
+
+plt.savefig('Figure4_multiy0.eps', format='eps')
+plt.show()
+
+## Figure 7
+
+def c(t):
+    return 0.5 + 0.2 * np.sin(t)
+
+def e(t):
+    return 0.6 + 0.1 * np.cos(t)
+
+
+alpha = 0.3                     
+y0_list = [0.2, 0.35, 0.5, 0.65]
+pmin = 0.18
+t_end = 50.0
+
+
+impulse_families = [
+    list(range(3, 51, 3)),    
+    list(range(2, 51, 2)),    
+    list(range(1, 51, 1))     
+]
+
+
+def K(y, alpha):
+    if y < pmin:
+        return 0.0
+    else:
+        return alpha * (1.0 - y) / (2.0 - (y + pmin))
+
+
+def f(t, y):
+    
+    return c(t) * y * (1.0 - y) - e(t) * y
+
+
+fig, axes = plt.subplots(nrows=3, ncols=1, figsize=(8, 10), sharex=True)
+
+for idx, impulse_times in enumerate(impulse_families):
+    ax = axes[idx]
+
+    for y0 in y0_list:
+        t_parts, y_parts = [], []
+        current_t = 0.0
+        current_y = float(y0)
+
+        
+        for t_impulse in impulse_times:
+            if t_impulse <= current_t:
+                continue
+            if t_impulse > t_end:
+                break
+
+            sol = solve_ivp(
+                f, (current_t, t_impulse), [current_y],
+                t_eval=np.linspace(current_t, t_impulse, 200)
+            )
+            t_parts.append(sol.t)
+            y_parts.append(sol.y[0])
+
+            
+            current_t = float(t_impulse)
+            y_before = float(sol.y[0, -1])
+            current_y = y_before + K(y_before, alpha)
+
+            
+            t_parts.append(np.array([current_t]))
+            y_parts.append(np.array([current_y]))
+
+        
+        if current_t < t_end:
+            sol = solve_ivp(
+                f, (current_t, t_end), [current_y],
+                t_eval=np.linspace(current_t, t_end, 200)
+            )
+            t_parts.append(sol.t)
+            y_parts.append(sol.y[0])
+
+        
+        t_total = np.concatenate(t_parts) if len(t_parts) else np.array([0.0])
+        y_total = np.concatenate(y_parts) if len(y_parts) else np.array([y0])
+
+        ax.plot(t_total, y_total, label=f'$p(0)={y0}$')
+
+    
+    ax.axhline(pmin, color='gray', linestyle='--', linewidth=1, label=r'$p_{\min}=0.18$')
+    
+    if len(impulse_times) >= 2 and np.allclose(np.diff(impulse_times), np.diff(impulse_times)[0]):
+        dt = np.diff(impulse_times)[0]
+        ax.set_title(fr'Observation times $\{{{{{dt}}}\, n\}}_{{n}}$ and $\alpha=0.3$')
+    else:
+        ax.set_title(f'Familia {idx+1}: impulsos en {impulse_times}  (α=0.3)')
+    ax.set_ylabel('Fraction of inhabited patches')
+    ax.grid(True)
+    ax.legend(loc='upper right')
+
+axes[-1].set_xlabel('Time')
+
+plt.tight_layout()
+plt.savefig('Figure4_multiy0_familias.eps', format='eps')
+plt.show()
+
+
+
+
