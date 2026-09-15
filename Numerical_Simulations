@@ -1,8 +1,11 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.integrate import solve_ivp
+from scipy.integrate import solve_ivp, quad
+from scipy.optimize import minimize_scalar
 
-## Figure 3.
+#==========
+# Figure 2.
+#==========
 
 # Time varying parameters
 def c(t):
@@ -77,7 +80,9 @@ axes[-1].set_xlabel('Time')
 plt.savefig('Figura1.eps', format='eps')
 plt.show()
 
-## Figure 4
+#==========
+# Figure 3
+#==========
 
 # Time varying parameters
 def c(t):
@@ -88,7 +93,7 @@ def e(t):
 
 # Initial conditions and parameters
 y0_list = np.array([0.65, 0.50, 0.35, 0.20])  
-alpha_list = np.array([0.45, 0.55])
+alpha_list = np.array([0.55])
 
 t_end = 30
 
@@ -155,8 +160,9 @@ for alpha in alpha_list:
     plt.savefig(f'Figure2_alpha_{alpha:.2f}.eps', format='eps')
     plt.show()
 
-
-## Figure 5
+#==========
+# Figure 4
+#==========
 
 def c(t):
     return 0.5 + 0.1 * np.sin(t)
@@ -290,8 +296,9 @@ plt.tight_layout()
 plt.savefig('PeriodicFigure.eps', format='eps')
 plt.show()
 
-## Figure 6
-
+#==========
+# Figure 5
+#==========
 # Time varying parameters
 def c(t):
     return 0.5 + 0.2 * np.sin(t)
@@ -313,7 +320,7 @@ def K(y, alpha):
     else:
         return alpha * (1 - y) / (2 - (y + pmin))
 
-# Build Figure 3
+# Build Figure
 fig, axes = plt.subplots(nrows=3, ncols=1, figsize=(8, 10), sharex=True)
 
 for idx, alpha in enumerate(alpha_list):
@@ -359,8 +366,9 @@ axes[-1].set_xlabel('Time')
 plt.savefig('Figure4_multiy0.eps', format='eps')
 plt.show()
 
-## Figure 7
-
+#==========
+# Figure 6
+#==========
 def c(t):
     return 0.5 + 0.2 * np.sin(t)
 
@@ -458,7 +466,4 @@ axes[-1].set_xlabel('Time')
 plt.tight_layout()
 plt.savefig('Figure4_multiy0_familias.eps', format='eps')
 plt.show()
-
-
-
 
