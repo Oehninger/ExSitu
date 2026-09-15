@@ -296,6 +296,212 @@ plt.tight_layout()
 plt.savefig('PeriodicFigure.eps', format='eps')
 plt.show()
 
+# ============================================================
+# Numerical verification of the periodic solution (Theorem 2)
+# ============================================================
+
+# Period and first impulse time
+T = 2 * np.pi
+t1 = 1.0
+
+# Values selected for the numerical examples
+umax_values = [12.0, 15.0, 20.0]
+
+
+def periodic_parameters(umax):
+    """
+    Computes the parameters defining the periodic solution
+    according to Theorem 2.
+    """
+
+    # exp(int_0^T d(s) ds)
+    factor_exp_0_T = compute_exp_integral_d_0_T(T, d)
+
+    # Psi(t1)
+    psi_t1 = Psi(
+        t=t1,
+        T=T,
+        c_fun=c,
+        d_fun=d,
+        factor_exp_0_T=factor_exp_0_T
+    )
+
+    # u_alpha
+    u_alpha = (umax - psi_t1) / factor_exp_0_T
+
+    # minimum viable threshold
+    pmin = 1.0 / umax
+
+    # impulse magnitude
+    alpha = 1.0 / u_alpha - pmin
+
+    # u(0)
+    u0 = compute_u0(
+        t1=t1,
+        T=T,
+        c_fun=c,
+        d_fun=d,
+        u_alpha=u_alpha
+    )
+
+    # corresponding initial condition
+    p0 = 1.0 / u0
+
+    return {
+        "u_max": umax,
+        "Psi(t1)": psi_t1,
+        "u_alpha": u_alpha,
+        "p_min": pmin,
+        "alpha": alpha,
+        "u0": u0,
+        "p0": p0
+    }
+
+
+# Compute parameters for all cases
+parameter_results = [
+    periodic_parameters(umax)
+    for umax in umax_values
+]
+
+df_parameters = pd.DataFrame(parameter_results)
+
+print("\nParameters obtained from Theorem 2")
+print("=" * 70)
+print(df_parameters.to_string(index=False))
+
+def make_threshold_event(pmin):
+    """
+    Event corresponding to a downward crossing of p_min.
+    """
+    def event(t, y):
+        return y[0] - pmin
+
+    event.terminal = True
+    event.direction = -1
+
+    return event
+
+
+def periodicity_check(umax, n_impulses=6):
+    """
+    Computes successive impulse times and compares the
+    inter-impulse intervals with T = 2*pi.
+    """
+
+    pars = periodic_parameters(umax)
+
+    pmin = pars["p_min"]
+    alpha = pars["alpha"]
+    p0 = pars["p0"]
+
+    event = make_threshold_event(pmin)
+
+    current_t = 0.0
+    current_y = np.array([p0])
+
+    impulse_times = []
+
+    for k in range(n_impulses):
+
+        sol = solve_ivp(
+            dydt,
+            (current_t, current_t + 2*T),
+            current_y,
+            events=event,
+
+            # High-accuracy integration for the periodicity check
+            rtol=1e-11,
+            atol=1e-13
+        )
+
+        if len(sol.t_events[0]) == 0:
+            raise RuntimeError(
+                f"No threshold crossing detected after impulse {k}."
+            )
+
+        # Exact event location returned by solve_ivp
+        te = sol.t_events[0][0]
+        pe = sol.y_events[0][0][0]
+
+        impulse_times.append(te)
+
+        # Apply the impulse
+        current_t = te
+        current_y = np.array([pe + alpha])
+
+    impulse_times = np.asarray(impulse_times)
+
+    # Inter-impulse intervals
+    intervals = np.diff(impulse_times)
+
+    # Errors relative to T
+    interval_errors = np.abs(intervals - T)
+
+    # Theoretical impulse times:
+    # t_k = t1 + (k-1)T
+    theoretical_times = (
+        t1 + np.arange(n_impulses) * T
+    )
+
+    time_errors = np.abs(
+        impulse_times - theoretical_times
+    )
+
+    return (
+        pars,
+        impulse_times,
+        intervals,
+        interval_errors,
+        theoretical_times,
+        time_errors
+    )
+
+for umax in umax_values:
+
+    (
+        pars,
+        impulse_times,
+        intervals,
+        interval_errors,
+        theoretical_times,
+        time_errors
+    ) = periodicity_check(
+        umax,
+        n_impulses=6
+    )
+
+    print("\n" + "=" * 75)
+    print(f"u_max = {umax:g}")
+    print(f"p_min = {pars['p_min']:.10f}")
+    print(f"alpha = {pars['alpha']:.10f}")
+    print(f"p(0)  = {pars['p0']:.10f}")
+    print("=" * 75)
+
+    df_check = pd.DataFrame({
+        "k": np.arange(1, len(impulse_times) + 1),
+        "t_k numerical": impulse_times,
+        "t_k theoretical": theoretical_times,
+        "|time error|": time_errors
+    })
+
+    print("\nImpulse times:")
+    print(df_check.to_string(index=False))
+
+    df_intervals = pd.DataFrame({
+        "interval": np.arange(1, len(intervals) + 1),
+        "Delta t": intervals,
+        "T = 2pi": T,
+        "|Delta t - T|": interval_errors
+    })
+
+    print("\nInter-impulse intervals:")
+    print(df_intervals.to_string(index=False))
+
+    print(
+        "\nMaximum periodicity error = "
+        f"{np.max(interval_errors):.3e}"
+    )
 #==========
 # Figure 5
 #==========
