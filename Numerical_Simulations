@@ -5,7 +5,7 @@ from scipy.integrate import solve_ivp, quad
 from scipy.optimize import minimize_scalar
 
 #==========
-# Figure 2.
+# Figure 3.
 #==========
 
 # Time varying parameters
@@ -82,7 +82,7 @@ plt.savefig('Figura1.eps', format='eps')
 plt.show()
 
 #==========
-# Figure 3
+# Figure 4
 #==========
 
 # Time varying parameters
@@ -162,7 +162,7 @@ for alpha in alpha_list:
     plt.show()
 
 #==========
-# Figure 4
+# Figure 5
 #==========
 
 def c(t):
@@ -508,7 +508,7 @@ for umax in umax_values:
         f"{np.max(interval_errors):.3e}"
     )
 #==========
-# Figure 5
+# Figure 6
 #==========
 # Time varying parameters
 def c(t):
@@ -578,7 +578,7 @@ plt.savefig('Figure4_multiy0.eps', format='eps')
 plt.show()
 
 #==========
-# Figure 6
+# Figure 7
 #==========
 def c(t):
     return 0.5 + 0.2 * np.sin(t)
