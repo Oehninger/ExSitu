@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.integrate import solve_ivp, quad
 from scipy.optimize import minimize_scalar
@@ -216,7 +217,7 @@ def make_event(umax):
     return evento
 
 
-_ = minimize_scalar(h, bounds=(1, 3), method='bounded')  # mismo cálculo que tenías; opcional mostrar
+_ = minimize_scalar(h, bounds=(1, 3), method='bounded') 
 T = 2*np.pi
 factor_exp_0_T = compute_exp_integral_d_0_T(T, d)
 
@@ -234,7 +235,8 @@ for idx, umax in enumerate(umax_values):
     psi_1   = Psi(t=1.0, T=T, c_fun=c, d_fun=d, factor_exp_0_T=factor_exp_0_T)
     u_alpha = (umax - psi_1) / (factor_exp_0_T)
     pmin    = 1.0/umax
-    alpha2  = 1.0/u_alpha - pmin
+    jump  = 1.0/u_alpha - pmin
+    alpha  = 2.0*jump
 
     
     t1 = 1.0
@@ -267,7 +269,7 @@ for idx, umax in enumerate(umax_values):
             te = sol.t_events[0][0]
             ye = sol.y_events[0][0][0]
             current_t = te
-            current_y = np.array([ye + alpha2])  # aplicar impulso
+            current_y = np.array([ye + jump])  # aplicar impulso
 
             
             t_full.append([current_t])
@@ -287,7 +289,7 @@ for idx, umax in enumerate(umax_values):
     ax.set_ylabel('Fraction of inhabited patches')
     ax.grid(True)
     ax.legend(loc='upper right')
-    ax.set_title(fr'$u_{{\max}}={umax},\ \alpha={alpha2:.4f}$')
+    ax.set_title(fr'$u_{{\max}}={umax},\ \alpha/2={jump:.4f}$')
 
 
 axes[-1].set_xlabel('Time')
@@ -332,8 +334,11 @@ def periodic_parameters(umax):
     # minimum viable threshold
     pmin = 1.0 / umax
 
-    # impulse magnitude
-    alpha = 1.0 / u_alpha - pmin
+    # jump size alpha/2
+    jump = 1.0 / u_alpha - pmin
+
+    # parameter alpha appearing in model (3.1)
+    alpha = 2.0 * jump
 
     # u(0)
     u0 = compute_u0(
@@ -344,7 +349,6 @@ def periodic_parameters(umax):
         u_alpha=u_alpha
     )
 
-    # corresponding initial condition
     p0 = 1.0 / u0
 
     return {
@@ -352,6 +356,7 @@ def periodic_parameters(umax):
         "Psi(t1)": psi_t1,
         "u_alpha": u_alpha,
         "p_min": pmin,
+        "alpha/2": jump,
         "alpha": alpha,
         "u0": u0,
         "p0": p0
@@ -392,7 +397,7 @@ def periodicity_check(umax, n_impulses=6):
     pars = periodic_parameters(umax)
 
     pmin = pars["p_min"]
-    alpha = pars["alpha"]
+    jump = pars["alpha/2"]
     p0 = pars["p0"]
 
     event = make_threshold_event(pmin)
@@ -428,7 +433,7 @@ def periodicity_check(umax, n_impulses=6):
 
         # Apply the impulse
         current_t = te
-        current_y = np.array([pe + alpha])
+        current_y = np.array([pe + jump])
 
     impulse_times = np.asarray(impulse_times)
 
