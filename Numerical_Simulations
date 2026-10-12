@@ -15,71 +15,322 @@ def c(t):
 def e(t):
     return 0.6 + 0.1 * np.cos(t)
 
-# initial condition and parameters
+def d(t):
+    return e(t) - c(t)
+
+
+# Initial condition and parameters
 y0 = 0.5
 t_end = 30
-alpha_list = [0.05, 0.1, 0.15]
+pmin = 0.15
 
-# ODE 
+alpha_list = [0.05, 0.10, 0.15]
+
+
+# ============================================================
+# Constants appearing in Theorem 1
+# ============================================================
+
+c_norm = 0.7
+d_norm = 0.1 + np.sqrt(0.1**2 + 0.2**2)
+
+beta_minus_d = 0.1
+c_inf = 0.3
+
+# Choose epsilon in (0, beta^-(d))
+epsilon = 0.05
+
+# A sufficient value of T(epsilon) for this particular d(t)
+oscillation_bound = 2.0 * np.sqrt(0.1**2 + 0.2**2)
+
+T_epsilon = oscillation_bound / (beta_minus_d - epsilon)
+
+
+# Lower bound in Theorem 1
+def lower_bound(alpha):
+    numerator = (
+        1.0 / pmin
+        + c_norm / d_norm
+    )
+
+    denominator = (
+        1.0 / (pmin + alpha / 2.0)
+        + c_norm / d_norm
+    )
+
+    return (1.0 / d_norm) * np.log(numerator / denominator)
+
+
+# Conditional upper bound in Theorem 1
+def upper_bound(alpha):
+    numerator = (
+        epsilon / pmin
+        + np.exp(epsilon * T_epsilon) * c_inf
+    )
+
+    denominator = (
+        epsilon / (pmin + alpha / 2.0)
+        + c_inf
+    )
+
+    return (1.0 / epsilon) * np.log(numerator / denominator)
+
+
+print(f"||c||_inf      = {c_norm:.6f}")
+print(f"||d||_inf      = {d_norm:.6f}")
+print(f"beta^-(d)      = {beta_minus_d:.6f}")
+print(f"epsilon        = {epsilon:.6f}")
+print(f"T(epsilon)     = {T_epsilon:.6f}")
+print()
+
+
+# ============================================================
+# ODE
+# ============================================================
+
 def dydt(t, y):
     return c(t) * y * (1 - y) - e(t) * y
 
+
 # Impulse condition
 def evento(t, y):
-    return y[0] - 0.15
+    return y[0] - pmin
+
 evento.terminal = True
 evento.direction = -1
 
+
+# ============================================================
 # Build Figure
-fig, axes = plt.subplots(nrows=3, ncols=1, figsize=(6, 9), sharex=True)
+# ============================================================
+
+fig, axes = plt.subplots(
+    nrows=3,
+    ncols=1,
+    figsize=(6, 9),
+    sharex=True
+)
+
+# Store quantitative comparison
+results = []
+
 
 for idx, alpha in enumerate(alpha_list):
+
     t_full = []
     y_full = []
+
+    # Store impulse times
+    impulse_times = []
 
     current_t = 0
     current_y = np.array([y0])
 
     while current_t < t_end:
+
         sol = solve_ivp(
             dydt,
             (current_t, t_end),
             current_y,
             t_eval=np.linspace(current_t, t_end, 1000),
             events=evento,
-            rtol=1e-6, atol=1e-9
+            rtol=1e-6,
+            atol=1e-9
         )
 
         t_full.append(sol.t)
         y_full.append(sol.y[0])
 
-        if sol.status == 1:  # Impulse detection 
-            current_t = sol.t_events[0][0]
-            current_y = np.array([sol.y_events[0][0][0] + alpha / 2])  # Apply impulse
-            # Add jump
+        if sol.status == 1:
+
+            # Exact event time detected by solve_ivp
+            event_time = sol.t_events[0][0]
+
+            impulse_times.append(event_time)
+
+            current_t = event_time
+
+            # State immediately after the impulse
+            current_y = np.array([
+                sol.y_events[0][0][0] + alpha / 2.0
+            ])
+
+            # Add jump to trajectory
             t_full.append([current_t])
             y_full.append([current_y[0]])
+
         else:
             break
 
-    # Concatenate results
+
+    # Concatenate trajectory
     t_full = np.concatenate(t_full)
     y_full = np.concatenate(y_full)
 
-    
+
+    # ========================================================
+    # Inter-pulse intervals
+    # ========================================================
+
+    impulse_times = np.array(impulse_times)
+
+    if len(impulse_times) >= 2:
+
+        delta_t = np.diff(impulse_times)
+
+        delta_min = np.min(delta_t)
+        delta_max = np.max(delta_t)
+        delta_mean = np.mean(delta_t)
+
+    else:
+
+        delta_t = np.array([])
+
+        delta_min = np.nan
+        delta_max = np.nan
+        delta_mean = np.nan
+
+
+    # ========================================================
+    # Theoretical bounds
+    # ========================================================
+
+    L = lower_bound(alpha)
+    U = upper_bound(alpha)
+
+
+    # Check lower-bound condition
+    lower_verified = (
+        np.all(delta_t >= L)
+        if len(delta_t) > 0
+        else False
+    )
+
+
+    # --------------------------------------------------------
+    # The upper estimate is applicable only to intervals
+    # satisfying BOTH:
+    #
+    #       t_n > T(epsilon)
+    #
+    # and
+    #
+    #       t_{n+1} - t_n > T(epsilon)
+    # --------------------------------------------------------
+
+    if len(impulse_times) >= 2:
+
+        tn = impulse_times[:-1]
+
+        upper_mask = (
+            (tn > T_epsilon)
+            & (delta_t > T_epsilon)
+        )
+
+        applicable_intervals = delta_t[upper_mask]
+
+        n_upper_applicable = len(applicable_intervals)
+
+        if n_upper_applicable > 0:
+            upper_verified = np.all(applicable_intervals < U)
+        else:
+            upper_verified = False
+
+    else:
+
+        n_upper_applicable = 0
+        upper_verified = False
+
+
+    # Store results
+    results.append({
+        "alpha": alpha,
+        "alpha/2": alpha / 2.0,
+        "Lower bound": L,
+        "min Delta t": delta_min,
+        "max Delta t": delta_max,
+        "mean Delta t": delta_mean,
+        "Upper bound": U,
+        "Lower verified": lower_verified,
+        "Intervals satisfying upper hypotheses":
+            n_upper_applicable,
+        "Upper verified": (
+            upper_verified
+            if n_upper_applicable > 0
+            else "Not applicable"
+        )
+    })
+
+
+    # ========================================================
+    # Plot
+    # ========================================================
+
     ax = axes[idx]
-    ax.plot(t_full, y_full, label=f'$\\alpha={alpha}$')
-    #ax.set_ylim(0,1)
-    ax.axhline(0.15, color='gray', linestyle='--', label='$p_{\min}=0.15$')
-    ax.set_ylabel('Fraction of inhabited patches')
+
+    ax.plot(
+        t_full,
+        y_full,
+        label=fr'$\alpha={alpha}$'
+    )
+
+    ax.axhline(
+        pmin,
+        color='gray',
+        linestyle='--',
+        label=fr'$p_{{\min}}={pmin}$'
+    )
+
+    ax.set_ylabel(
+        'Fraction of inhabited patches'
+    )
+
     ax.grid(True)
     ax.legend(loc='upper right')
 
 
 axes[-1].set_xlabel('Time')
 
-plt.savefig('Figura1.eps', format='eps')
+plt.tight_layout()
+
+plt.savefig(
+    'Figura1.eps',
+    format='eps',
+    bbox_inches='tight'
+)
+
 plt.show()
+
+
+# ============================================================
+# Quantitative comparison with Theorem 1
+# ============================================================
+
+df_bounds = pd.DataFrame(results)
+
+print("\nComparison with Theorem 1:\n")
+print(df_bounds.to_string(index=False))
+
+
+# Optional: compact table for manuscript
+df_manuscript = df_bounds[
+    [
+        "alpha",
+        "Lower bound",
+        "min Delta t",
+        "max Delta t",
+        "Upper bound",
+        "Intervals satisfying upper hypotheses"
+    ]
+].copy()
+
+print("\nCompact table:\n")
+print(
+    df_manuscript.to_string(
+        index=False,
+        float_format=lambda x: f"{x:.5f}"
+    )
+)
 
 #==========
 # Figure 4
